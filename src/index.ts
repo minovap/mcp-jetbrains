@@ -199,7 +199,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools = await toolsResponse.json();
         log(`Successfully fetched tools: ${JSON.stringify(tools)}`);
 
-        const filteredTools = (() => {
+        const filteredTools: Tool[] = (() => {
             try {
                 const whitelist = JSON.parse(process.env.INTELLIJ_TOOLS_WHITELIST ?? '');
                 const whitelistSchema = z.array(z.string());
@@ -210,12 +210,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
         })();
 
+        filteredTools.push({
+            name: 'apply_patch',
+            description: `
+        Applies a unified diff patch to a specified file in the project.
+        Use this tool to modify files by applying patches in unified diff format.
+        Requires parameters:
+            - patchContent: The patch content in unified diff format
+        Returns one of these responses:
+            - "patch applied successfully" if the patch was applied without conflicts
+            - "patch applied with conflicts" if the patch was applied but had conflicts
+            - error message if the operation fails
+    `,
+            inputSchema : {
+                type: 'object',
+                properties: {
+                    patchContent: {
+                        type: 'string',
+                    }
+                },
+                required: ['patchContent'],
+            }
+        })
+
         return { tools: filteredTools };
     } catch (error) {
         log("Error handling ListToolsRequestSchema request:", error);
         throw error;
     }
 });
+
 
 /**
  * Handle calls to a specific tool by using the *cached* endpoint.
