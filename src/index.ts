@@ -8,6 +8,7 @@ import {
     ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { applyPatchToFiles } from 'llm-diff-patcher';
 
 type Tool = z.infer<typeof ToolSchema>;
 
@@ -161,6 +162,25 @@ async function updateIDEEndpoint() {
 }
 
 /**
+ * Fetches project root path from IDE
+ */
+async function getProjectRoot(endpoint: string): Promise<string | null> {
+    try {
+        const res = await fetch(`${endpoint}/mcp/get_project_root_path`, {
+            method: 'POST',
+            headers: { "Content-Type": "application/json" },
+            body: '{}'
+        });
+
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.status || null;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Main MCP server
  */
 const server = new Server(
@@ -215,6 +235,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             description: `
         Applies a unified diff patch to a specified file in the project.
         Use this tool to modify files by applying patches in unified diff format.
+        The format is as follows:
+        --- old_file.txt
+        +++ new_file.txt
+        @@ -1,4 +1,6 @@
+        +line added
+         line unchanged
+        -line removed
+
         Requires parameters:
             - patchContent: The patch content in unified diff format
         Returns one of these responses:
@@ -251,6 +279,42 @@ async function handleToolCall(name: string, args: any): Promise<CallToolResult> 
         throw new Error("No working IDE endpoint available.");
     }
 
+    // Special handler for the apply_patch tool
+    if (name === 'apply_patch') {
+        log(`Using custom handler for ${name}`);
+        try {
+            const rootPath = await getProjectRoot(cachedEndpoint);
+
+            if (rootPath === null) {
+                return {
+                    content: [{type: "text", text: "Could not retrieve project root path"}],
+                    isError: false,
+                };
+            }
+
+
+            log(`apply_patch - patch`, args.patch);
+            log(`apply_patch - basePath`, rootPath);
+
+            const result =  applyPatchToFiles(args.patchContent, { basePath: rootPath });
+
+            return {
+                content: [{type: "text", text: JSON.stringify(result)}],
+                isError: false,
+            };
+        } catch (error: any) {
+            log(`Error in custom handler for ${name}:`, error);
+            return {
+                content: [{
+                    type: "text",
+                    text: error instanceof Error ? error.message : "Unknown error in custom handler",
+                }],
+                isError: true,
+            };
+        }
+    }
+
+    // Default handler for other tools
     try {
         log(`ENDPOINT: ${cachedEndpoint} | Tool name: ${name} | args: ${JSON.stringify(args)}`);
         const response = await fetch(`${cachedEndpoint}/mcp/${name}`, {
@@ -330,6 +394,7 @@ async function runServer() {
 
     log("JetBrains Proxy MCP Server running on stdio");
 }
+
 
 // Start the server
 runServer().catch(error => {
