@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 import {Server} from "@modelcontextprotocol/sdk/server/index.js";
 import {StdioServerTransport} from "@modelcontextprotocol/sdk/server/stdio.js";
-import {CallToolRequestSchema, CallToolResult, ListToolsRequestSchema,} from "@modelcontextprotocol/sdk/types.js";
+import {
+    CallToolRequestSchema,
+    CallToolResult,
+    ListToolsRequestSchema,
+    ToolSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+
+type Tool = z.infer<typeof ToolSchema>;
 
 // Logging is enabled only if LOG_ENABLED environment variable is set to 'true'
 const LOG_ENABLED = process.env.LOG_ENABLED === 'true';
@@ -49,6 +57,14 @@ function sendToolsChanged() {
         log("Error sending tools changed notification:", error);
     }
 }
+
+async function loopWithDelay() {
+    for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+}
+
+loopWithDelay();
 
 /**
  * Test if /mcp/list_tools is responding on a given endpoint
@@ -167,6 +183,7 @@ const server = new Server(
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     log("Handling ListToolsRequestSchema request.");
+
     if (!cachedEndpoint) {
         // If no cached endpoint, we can't proceed
         throw new Error("No working IDE endpoint available.");
@@ -174,13 +191,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     try {
         log(`Using cached endpoint ${cachedEndpoint} to list tools.`);
         const toolsResponse = await fetch(`${cachedEndpoint}/mcp/list_tools`);
+
         if (!toolsResponse.ok) {
             log(`Failed to fetch tools with status ${toolsResponse.status}`);
             throw new Error("Unable to list tools");
         }
         const tools = await toolsResponse.json();
         log(`Successfully fetched tools: ${JSON.stringify(tools)}`);
-        return {tools};
+
+        const filteredTools = (() => {
+            try {
+                const whitelist = JSON.parse(process.env.INTELLIJ_TOOLS_WHITELIST ?? '');
+                const whitelistSchema = z.array(z.string());
+                const validatedWhitelist = whitelistSchema.parse(whitelist);
+                return tools.filter((tool: Tool) => validatedWhitelist.includes(tool.name));
+            } catch (error) {
+                return tools;
+            }
+        })();
+
+        return { tools: filteredTools };
     } catch (error) {
         log("Error handling ListToolsRequestSchema request:", error);
         throw error;
