@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 import {Server} from "@modelcontextprotocol/sdk/server/index.js";
 import {StdioServerTransport} from "@modelcontextprotocol/sdk/server/stdio.js";
-import {CallToolRequestSchema, CallToolResult, ListToolsRequestSchema,} from "@modelcontextprotocol/sdk/types.js";
+import {
+    CallToolRequestSchema,
+    CallToolResult,
+    GetPromptRequestSchema,
+    ListPromptsRequestSchema,
+    ListToolsRequestSchema,
+    PromptSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 
 import { ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -159,6 +166,7 @@ const server = new Server(
     },
     {
         capabilities: {
+            prompts: {},
             tools: {
                 listChanged: true,
             },
@@ -424,3 +432,56 @@ async function runInjectedToolHandlers(name: string, args: any): Promise<CallToo
 runServer().catch(error => {
     log("Server failed to start:", error);
 });
+
+const PROMPTS: Record<string, z.infer<typeof PromptSchema>> ={
+    "explain-code": {
+        name: "explain-code",
+        description: "Explain how code works",
+        arguments: [
+            {
+                name: "code",
+                description: "Code to explain",
+                required: true
+            },
+            {
+                name: "language",
+                description: "Programming language",
+                required: false
+            }
+        ]
+    }
+};
+
+
+// List available prompts
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return {
+        prompts: Object.values(PROMPTS)
+    };
+});
+
+// Get specific prompt
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const prompt = PROMPTS[request.params.name];
+    if (!prompt) {
+        throw new Error(`Prompt not found: ${request.params.name}`);
+    }
+
+    if (request.params.name === "explain-code") {
+        const language = request.params.arguments?.language || "Unknown";
+        return {
+            messages: [
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text: `Explain how this ${language} code works:\n\n${request.params.arguments?.code}`
+                    }
+                }
+            ]
+        };
+    }
+
+    throw new Error("Prompt implementation not found");
+});
+
