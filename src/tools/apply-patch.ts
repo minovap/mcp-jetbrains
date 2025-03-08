@@ -21,16 +21,6 @@ export const applyPatchTool: Tool = {
      line unchanged
     -line removed
     
-    Blocks of lines to be removed can be found context based.
-    Using the multiline command with operator \\ will match lines 1-10:
-    
-    @@ -1,2 +1,2 @@
-    -Line to be removed 1
-    -Line to be removed 2
-    \\multiline
-    -Line to be removed 9
-    -Line to be removed 10
-
     Requires parameters:
         - patchContent: The patch content in unified diff format
     Returns one of these responses:
