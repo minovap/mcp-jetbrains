@@ -85,12 +85,12 @@ export async function handleApplyPatch(args: { patchContent: string }): Promise<
         
         // The options parameter is required, provide a default when rootPath is not available
         const basePath = rootPath || process.cwd();
-        result = await applyPatchToFiles(patchContent, { basePath });
+        result = applyPatchToFiles(patchContent, { basePath });
         
         if (result.success) {
             let message = "patch applied successfully";
             if (result.failedHunks > 0) {
-                message = "patch applied with conflicts";
+                message = `${result.failedHunks} of ${result.totalHunks} hunks failed`;
             }
             
             return {
