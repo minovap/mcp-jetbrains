@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Load environment variables
+import 'dotenv/config';
+
 import {Server} from "@modelcontextprotocol/sdk/server/index.js";
 import {StdioServerTransport} from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -8,12 +11,14 @@ import {
     ListPromptsRequestSchema,
     ListToolsRequestSchema,
     PromptSchema,
+    Tool
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { applyPatchToFiles } from 'llm-diff-patcher';
-type Tool = z.infer<typeof ToolSchema>;
+import { availableTools, handleTool } from './tools/index.js';
+
+// Re-use the SDK's CallToolResult type
+// No need to redefine it
 
 // Logging is enabled only if LOG_ENABLED environment variable is set to 'true'
 const LOG_ENABLED = process.env.LOG_ENABLED === 'true';
@@ -210,9 +215,9 @@ async function handleToolCall(name: string, args: any): Promise<CallToolResult> 
         throw new Error("No working IDE endpoint available.");
     }
 
-    // Special handler for the apply_patch tool
-    if (name === 'apply_patch') {
-        return runInjectedToolHandlers(name, args)
+    // Handle tools from our tools module first
+    if (availableTools.some(tool => tool.name === name)) {
+        return await handleTool(name, args);
     }
 
     // Default handler for other tools
@@ -297,25 +302,6 @@ async function runServer() {
 }
 
 /**
- * Fetches project root path from IDE
- */
-async function getProjectRoot(endpoint: string): Promise<string | null> {
-    try {
-        const res = await fetch(`${endpoint}/mcp/get_project_root_path`, {
-            method: 'POST',
-            headers: { "Content-Type": "application/json" },
-            body: '{}'
-        });
-
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data.status || null;
-    } catch {
-        return null;
-    }
-}
-
-/**
  * Prepares the list of tools by filtering according to whitelist and adding built-in tools
  */
 function prepareToolsList(tools: Tool[]): Tool[] {
@@ -330,102 +316,11 @@ function prepareToolsList(tools: Tool[]): Tool[] {
         }
     })();
 
-    filteredTools.push({
-        name: 'apply_patch',
-        description: `
-    Prefer this tool to replace_file_text_by_path
 
-    Applies a unified diff patch to a specified file in the project.
-    Use this tool to modify files by applying patches in unified diff format.
-    All content lines must operators / start with "+" "-" or " " (white space)
-    The format is as follows:
-
-    --- path_relative_to_project_root/old_file.txt
-    +++ path_relative_to_project_root/new_file.txt
-    @@ -1,4 +1,6 @@
-    +line added
-     line unchanged
-    -line removed
+    // Add custom tools
+    availableTools.forEach(tool => filteredTools.push(tool));
     
-    Blocks of lines to be removed can be found context based.
-    Using the multiline command with operator \\ will match lines 1-10:
-    
-    @@ -1,2 +1,2 @@
-    -Line to be removed 1
-    -Line to be removed 2
-    \\multiline
-    -Line to be removed 9
-    -Line to be removed 10
-
-    Requires parameters:
-        - patchContent: The patch content in unified diff format
-    Returns one of these responses:
-        - "patch applied successfully" if the patch was applied without conflicts
-        - "patch applied with conflicts" if the patch was applied but had conflicts
-        - error message if the operation fails
-`,
-        inputSchema : {
-            type: 'object',
-            properties: {
-                patchContent: {
-                    type: 'string',
-                }
-            },
-            required: ['patchContent'],
-        }
-    });
-
     return filteredTools;
-}
-
-async function runInjectedToolHandlers(name: string, args: any): Promise<CallToolResult> {
-    // Special handler for the apply_patch tool
-    if (!cachedEndpoint) {
-        // If no cached endpoint, we can't proceed
-        throw new Error("No working IDE endpoint available.");
-    }
-
-    if (name === 'apply_patch') {
-        log(`Using custom handler for ${name}`);
-        try {
-            const rootPath = await getProjectRoot(cachedEndpoint);
-
-            if (rootPath === null) {
-                return {
-                    content: [{type: "text", text: "Could not retrieve project root path"}],
-                    isError: false,
-                };
-            }
-
-
-            log(`apply_patch - patch`, args.patch);
-            log(`apply_patch - basePath`, rootPath);
-
-            const result =  applyPatchToFiles(args.patchContent, { basePath: rootPath });
-
-            return {
-                content: [{type: "text", text: JSON.stringify(result)}],
-                isError: false,
-            };
-        } catch (error: any) {
-            log(`Error in custom handler for ${name}:`, error);
-            return {
-                content: [{
-                    type: "text",
-                    text: error instanceof Error ? error.message : "Unknown error in custom handler",
-                }],
-                isError: true,
-            };
-        }
-    }
-
-    return {
-        content: [{
-            type: "text",
-            text: `Tried to use injected tool with missing handler: ${name}`,
-        }],
-        isError: true,
-    };
 }
 
 // Start the server
