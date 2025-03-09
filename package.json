@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsc && shx chmod +x dist/src/*.js",
     "prepare": "npm run build",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "postinstall": "xattr -w 'com.apple.fileprovider.ignore#P' 1 node_modules"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.1.0",
