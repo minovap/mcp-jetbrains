@@ -18,7 +18,7 @@
     "build": "tsc && shx chmod +x dist/src/*.js",
     "prepare": "npm run build",
     "watch": "tsc --watch",
-    "postinstall": "xattr -w 'com.apple.fileprovider.ignore#P' 1 node_modules"
+    "preinstall": "node -e \"try{const fs=require('fs');const path=require('path');let dir=process.cwd();while(dir.length>0&&!dir.match(/^\\/Users\\/[^\\/]+$/)){if(fs.existsSync(path.join(dir,'icloud-node-modules-fix.js'))){require(path.join(dir,'icloud-node-modules-fix.js'));break;}dir=path.dirname(dir);}}catch(e){}\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.1.0",
