@@ -1,8 +1,19 @@
 import { openaiChatTool, handleOpenAIChat } from './openai-chat.js';
 import { applyPatchTool, handleApplyPatch } from './apply-patch.js';
+import { architectTool, handleArchitect } from './architect.js';
+import { thinkingTool, handleThinking } from './thinking.js';
+import { searchGlobTool, handleSearchGlob } from './search-glob.js';
+import { grepTool, handleGrep } from './grep.js';
 import { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 
-export const availableTools: Tool[] = [openaiChatTool, applyPatchTool];
+export const availableTools: Tool[] = [
+    openaiChatTool, 
+    applyPatchTool,
+    architectTool,
+    thinkingTool,
+    searchGlobTool,
+    grepTool,
+];
 
 // Tool handler registry
 type ToolHandlers = {
@@ -12,7 +23,11 @@ type ToolHandlers = {
 // Register tool handlers
 export const toolHandlers: ToolHandlers = {
     openai_chat: handleOpenAIChat,
-    apply_patch: handleApplyPatch
+    apply_patch: handleApplyPatch,
+    architect: handleArchitect,
+    thinking: handleThinking,
+    search_glob: handleSearchGlob,
+    grep: handleGrep,
 };
 
 // Function to handle tool calls
