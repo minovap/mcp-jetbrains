@@ -305,17 +305,21 @@ async function runServer() {
  * Prepares the list of tools by filtering according to whitelist and adding built-in tools
  */
 function prepareToolsList(tools: Tool[]): Tool[] {
-    const filteredTools: Tool[] = (() => {
+    // First, filter out the get_project_root_path tool
+    const excludedTools = ['get_project_root_path'];
+    let filteredTools: Tool[] = tools.filter((tool: Tool) => !excludedTools.includes(tool.name));
+    
+    // Then apply whitelist if it exists
+    filteredTools = (() => {
         try {
             const whitelist = JSON.parse(process.env.INTELLIJ_TOOLS_WHITELIST ?? '');
             const whitelistSchema = z.array(z.string());
             const validatedWhitelist = whitelistSchema.parse(whitelist);
-            return tools.filter((tool: Tool) => validatedWhitelist.includes(tool.name));
+            return filteredTools.filter((tool: Tool) => validatedWhitelist.includes(tool.name));
         } catch (error) {
-            return tools;
+            return filteredTools;
         }
     })();
-
 
     // Add custom tools
     availableTools.forEach(tool => filteredTools.push(tool));
